@@ -1,0 +1,261 @@
+/*
+Banker's algorithm implementation on C
+https://en.wikipedia.org/wiki/Banker%27s_algorithm
+*/
+
+#include <stdio.h> // necessary includes for C-program
+
+// Define the maximum numbers of Processes and Resources
+#define MAX_NUMBER_OF_RESOURSES 10
+#define MAX_NUMBER_OF_PROCESSES 10
+
+
+/* Function that implements Banker's algorithm
+  Args:
+    processes - [int*], array of processes indices,
+    resources - [int*], array of available resources,
+    max_resources - [int*], array of requested resources,
+    allocated - [int*], array of allocated resources,
+    proc_number - [int], number of the processes,
+    res_number - [int], number of the resources
+*/
+void algoBanker(int* processes, int* resources, int* max_resources,
+            int* allocated, int proc_number, int res_number)
+{
+
+    // Mark all processes as not done
+    int process_done[proc_number];
+    for (int p = 0; p < proc_number; p++){
+                process_done[p]=0;
+    }
+
+    // Make a copy of available resources
+    int used_resources[res_number];
+    for (int i = 0; i < res_number ; i++){
+        used_resources[i] = resources[i];
+    }
+
+
+    int counter = 0;
+    int lock = 0;
+    int exec;
+
+    // While all processes are not finished
+    while(counter<proc_number){
+
+         lock = 1;
+         int matr_size = 0;
+         //printf("c %d", counter);
+         // iterate through the processes, looking for the process to finish
+         for (int p = 0; p < proc_number; ++p, matr_size += proc_number)
+         {
+             // if process is already finished - skip it
+             if (process_done[p])
+                continue;
+
+             exec = 1;
+
+             // for each of the resources - check if available
+             for (int j = 0; j < res_number; j++){
+                // do we have enough resources
+                if (max_resources[matr_size + j] > used_resources[j])
+                     {
+                         exec = 0;
+                         break;
+                     }
+             }
+             // the process p can be finished
+             if (exec){
+                     process_done[p] = 1;
+                     ++counter;
+                     lock =0 ;
+                     // update available resources
+                     for (int j = 0; j < res_number; j++){
+                         used_resources[j] += allocated[matr_size + j];
+                     }
+                    break;
+             }
+          }
+          // if wee have deadlock - exit
+          if(lock){
+            break;
+          }
+     }
+
+
+    // Storage of safe sequence
+    int safeSeq[proc_number];
+    // Storage of unsafe sequence
+    int deadlocksSeq[proc_number];
+
+    // form the answer(fill the storages)
+    int counter1=0;
+    int counter2=0;
+    // if the process is done - add to safeSeq
+    // else - add to deadlocksSeq
+    for(int i=0;i<proc_number;++i){
+        if(process_done[i] == 1){
+            safeSeq[counter1++] = processes[i];
+        }
+        else{
+            deadlocksSeq[counter2++] = processes[i];
+        }
+    }
+
+    // Write safe sequence
+    printf("Running order for processes : ");
+    for (int i = 0; i < counter ; i++)
+        printf("P%d ",safeSeq[i]);
+
+    printf("\n");
+
+    // write deadlock processes
+    if(counter2>0){
+        printf("There is a deadlock. ");
+        printf("P%d",deadlocksSeq[0]);
+        for (int i = 1; i < counter2 ; i++)
+                printf(" and P%d",deadlocksSeq[i]);
+
+        printf(" are the cause of deadlock.\n");
+    }
+
+    return;
+}
+
+// driver function
+int main(){
+
+    //ste the names of used files
+    char FILE_RESOURCE[] = "resources.txt";
+    char FILE_ALLOCATIONS[] = "allocations.txt";
+    char FILE_REQUESTS[] = "requests.txt";
+
+    // open Resource file
+    FILE *f_res = fopen(FILE_RESOURCE,"rt");
+    if(!f_res){
+        printf("File %s cannot be opened! Check the path!",FILE_RESOURCE);
+        return -1;
+    }
+
+    // open Allocations file
+    FILE *f_alloc = fopen(FILE_ALLOCATIONS,"rt");
+    if(!f_alloc){
+        printf("File %s cannot be opened! Check the path!",FILE_ALLOCATIONS);
+        return -2;
+    }
+
+    // open Request file
+    FILE *f_req = fopen(FILE_REQUESTS,"rt");
+    if(!f_req){
+        printf("File %s cannot be opened! Check the path!",FILE_REQUESTS);
+        return -3;
+    }
+
+
+    // read Resource file
+    int resource_vector[MAX_NUMBER_OF_RESOURSES]; // get Resource vector
+    int num_resources=0;
+    int check_input=0;
+    do{
+        //read integer in file
+        check_input = fscanf(f_res,"%d ", &resource_vector[num_resources]);
+        if(check_input != 1){
+            break;
+        }
+       // printf("Tmp %d %d",resource_vector[num_resources],check_input);
+
+        num_resources++; // increment vector's length
+    }while(!feof(f_res) && num_resources<MAX_NUMBER_OF_RESOURSES); // till the end of file of memory
+
+    fclose(f_res); //close file
+
+    // readAllocation file
+    check_input = 0;
+    // we use 1-dimensional array here as matrix
+    int alloc_resources[num_resources*MAX_NUMBER_OF_PROCESSES]; // matrix of allocated
+    int matr_size = 0;
+    int process_number = 0;
+    int stop=0;
+    do{
+        // read integer line by line
+        for (int i = 0; i < num_resources; i++){
+            check_input = fscanf(f_alloc,"%d ", &alloc_resources[i + matr_size]);
+            if(check_input!=1){
+                if(i>0){
+                    printf("Error in data of file %s! Check its content!",FILE_ALLOCATIONS);
+                    return -4;
+                }
+                stop = 1;
+                break;
+            }
+            //printf("%d",alloc_resources[i + matr_size]);
+        }
+        process_number++; // increment the number of processes
+        matr_size += num_resources;
+        // read till the end of file or error in file
+    }while(!feof(f_alloc) && !stop && process_number<MAX_NUMBER_OF_PROCESSES);
+
+    fclose(f_alloc);
+
+    // read Request file
+    // we use 1-dimensional array here as matrix
+    int req_resources[num_resources*process_number]; // required resourse matrix
+    int req_count = 0;
+    stop = 0;
+    matr_size = 0;
+    do{
+        for (int i = 0; i < num_resources; i++){
+            check_input = fscanf(f_req,"%d", &req_resources[i + matr_size]);
+            if(check_input!=1 && req_count<process_number ){
+                printf("Error in data of file %s! Check its content!",FILE_REQUESTS);
+                return -5;
+            }
+        }
+        req_count++;
+        matr_size += num_resources;
+
+    }while(req_count<process_number);
+
+    fclose(f_req);
+    // check the dimension of the data
+    if(req_count!=process_number){
+         printf("Error in data of file %s! Check its content!",FILE_REQUESTS);
+                return -5;
+    }
+
+    // create vector of processes and output data
+    int processes[process_number];
+    matr_size = 0;
+    int free_resources[num_resources];
+    for(int j=0;j<num_resources;j++){
+        free_resources[j] = resource_vector[j];
+    }
+
+    for(int i=0;i<process_number;i++){
+        processes[i] = i+1;
+        printf("Information for process : P%d:\n",i+1);
+
+        printf("Allocated resources : ");
+        for(int j=0;j<num_resources;j++){
+            printf("R%d:%d ",j+1,alloc_resources[matr_size + j]);
+            free_resources[j] -= alloc_resources[matr_size + j];
+        }
+        printf("\n");
+
+        printf("Resource request : ");
+        for(int j=0;j<num_resources;j++){
+            printf("R%d:%d ",j+1,req_resources[matr_size + j]);
+        }
+
+        /*printf("Need request : ");
+        for(int j=0;j<num_resources;j++){
+            printf("R%d:%d ",j+1,free_resources[j]);
+        }*/
+
+        printf("\n\n");
+        matr_size += num_resources;
+    }
+
+    // run the Banker algorithm function
+    algoBanker(processes,free_resources, req_resources, alloc_resources, process_number, num_resources);
+}
